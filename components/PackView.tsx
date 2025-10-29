@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Chart from 'react-apexcharts';
-import { GearItem, TagHierarchy, PackAnalysis } from '../types';
+import { GearItem, TagHierarchy, PackAnalysis, DistributionNode } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { analyzePack } from '../services/geminiService';
 
@@ -28,6 +28,7 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
   const [searchBy, setSearchBy] = useState<'item' | 'brand' | 'tag'>('item');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<PackAnalysis | null>(null);
+  const [chartPath, setChartPath] = useState<string[]>([]);
 
   const toggleItem = (itemId: string) => {
     setSelectedItems(prev => {
@@ -57,6 +58,8 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
 
   const handleAnalyzePack = async () => {
     setIsAnalyzing(true);
+    setChartPath([]);
+    setAnalysisResult(null);
     const result = await analyzePack(packedGear);
     setAnalysisResult(result);
     setIsAnalyzing(false);
@@ -93,12 +96,44 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
     }
   };
 
+  const currentChartData = useMemo((): DistributionNode[] => {
+    if (!analysisResult) return [];
+    if (chartPath.length === 0) {
+        return analysisResult.distribution;
+    }
+    let currentLevelData: DistributionNode[] | undefined = analysisResult.distribution;
+    for (const pathPart of chartPath) {
+        const nextNode = currentLevelData?.find(d => d.tag === pathPart);
+        currentLevelData = nextNode?.children;
+    }
+    return currentLevelData || [];
+  }, [analysisResult, chartPath]);
+
+
   const analysisChartOptions = useMemo(() => {
-    if (!analysisResult) return {};
+    const parentTag = chartPath.length > 0 ? tagHierarchy[chartPath[0]] : null;
+    const colors = currentChartData.map(d => {
+        if (chartPath.length === 0) return tagHierarchy[d.tag]?.color || '#94a3b8';
+        if (chartPath.length === 1 && parentTag) return tagHierarchy[parentTag.name]?.children[d.tag]?.color || parentTag.color; // Needs improvement
+        return parentTag?.color || '#94a3b8'; // Fallback
+    });
+    
     return {
-        chart: { type: 'pie', background: 'transparent' },
-        labels: analysisResult.distribution.map(d => d.tag),
-        colors: analysisResult.distribution.map(d => tagHierarchy[d.tag]?.color || '#94a3b8'),
+        chart: { 
+            type: 'pie', 
+            background: 'transparent',
+            events: {
+                dataPointSelection: (event: any, chartContext: any, config: any) => {
+                    const selectedTag = config.w.globals.labels[config.dataPointIndex];
+                    const selectedNode = currentChartData.find(d => d.tag === selectedTag);
+                    if (selectedNode && selectedNode.children && selectedNode.children.length > 0) {
+                        setChartPath(prev => [...prev, selectedTag]);
+                    }
+                }
+            }
+        },
+        labels: currentChartData.map(d => d.tag),
+        colors: colors,
         legend: {
             position: 'bottom',
             labels: { colors: '#cbd5e1' }
@@ -106,7 +141,7 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
         tooltip: {
             y: {
                 formatter: (value: number, { seriesIndex }: any) => {
-                    const weight = analysisResult.distribution[seriesIndex]?.weight || 0;
+                    const weight = currentChartData[seriesIndex]?.weight || 0;
                     return `${value.toFixed(1)}% (${weight}g)`;
                 },
             },
@@ -126,12 +161,11 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
             }
         },
     };
-  }, [analysisResult, tagHierarchy]);
+  }, [currentChartData, chartPath, tagHierarchy]);
 
   const analysisChartSeries = useMemo(() => {
-    if (!analysisResult) return [];
-    return analysisResult.distribution.map(d => d.percentage);
-  }, [analysisResult]);
+    return currentChartData.map(d => d.percentage);
+  }, [currentChartData]);
 
 
   const renderHierarchicalList = () => (
@@ -223,7 +257,22 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
 
             {(isAnalyzing || analysisResult) && (
               <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
-                <h3 className="text-lg font-bold mb-4 text-white text-center">Weight Distribution</h3>
+                <h3 className="text-lg font-bold mb-2 text-white text-center">Weight Distribution</h3>
+                 <div className="text-sm text-slate-400 mb-4 bg-slate-700/50 p-2 rounded-md flex items-center space-x-1 whitespace-nowrap overflow-x-auto">
+                    <button onClick={() => setChartPath([])} className="hover:text-white transition-colors">Total Pack</button>
+                    {chartPath.map((pathPart, index) => (
+                        <React.Fragment key={index}>
+                            <span className="text-slate-500">/</span>
+                            <button 
+                                onClick={() => setChartPath(chartPath.slice(0, index + 1))}
+                                className="hover:text-white transition-colors"
+                            >
+                                {pathPart}
+                            </button>
+                        </React.Fragment>
+                    ))}
+                </div>
+
                 {isAnalyzing && (
                   <div className="flex justify-center items-center h-56">
                     <div className="flex flex-col items-center">
@@ -235,12 +284,16 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
                     </div>
                   </div>
                 )}
-                {!isAnalyzing && analysisResult && (
+                {!isAnalyzing && analysisResult && currentChartData.length > 0 && (
                   <div>
-                    <p className="text-center text-xl font-bold text-white -mt-2 mb-2">Total Weight: {analysisResult.totalWeight}g</p>
                     <Chart options={analysisChartOptions} series={analysisChartSeries} type="pie" width="100%" />
                   </div>
                 )}
+                 {!isAnalyzing && analysisResult && currentChartData.length === 0 && (
+                    <div className="text-center text-slate-400 h-56 flex items-center justify-center">
+                        <p>No further breakdown available.</p>
+                    </div>
+                 )}
                  {!isAnalyzing && !analysisResult && (
                     <div className="text-center text-amber-400 h-56 flex items-center justify-center">
                         <p>Analysis could not be completed. Please try again.</p>

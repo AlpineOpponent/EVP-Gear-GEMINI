@@ -218,31 +218,45 @@ export const analyzePack = async (gearItems: GearItem[]): Promise<PackAnalysis |
     ).join('\n');
 
     const prompt = `
-You are an expert backpacking gear analyst. Your task is to analyze a provided list of gear items and calculate the weight distribution by top-level category.
+You are an expert backpacking gear analyst. Your task is to analyze a provided list of gear items and calculate a detailed, hierarchical weight distribution.
 
-Here is the list of gear items. Each item includes its name, weight in grams, and its category path:
+Here is the list of gear items. Each item includes its name, weight in grams, and its category path (Top Tag / Middle Tag / Base Tag):
 
 ${gearListString}
 
 **Instructions:**
 
 1.  **Calculate Total Weight:** Sum the weights of ALL items to get the total pack weight in grams.
-2.  **Group by Top Tag:** Group all items by their "Top Tag".
-3.  **Calculate Category Weights:** For each Top Tag, sum the weights of all items within that category.
-4.  **Calculate Percentages:** For each Top Tag, calculate what percentage of the total pack weight it represents. Calculate the percentage to one decimal place.
-5.  **Sort the List:** The distribution list must be sorted in descending order, from the highest percentage to the lowest.
-6.  **Format the Output:** You must return ONLY a JSON object that matches the provided schema.
+2.  **Hierarchical Grouping & Weight Calculation:**
+    - Sum the weights for each unique Base Tag (BT).
+    - Sum the weights for each unique Middle Tag (MT). This is the sum of its child BTs.
+    - Sum the weights for each unique Top Tag (TT). This is the sum of its child MTs.
+3.  **Hierarchical Percentage Calculation:**
+    - For each TT, calculate its percentage of the **total pack weight**.
+    - For each MT, calculate its percentage of its **parent TT's total weight**.
+    - For each BT, calculate its percentage of its **parent MT's total weight**.
+    - For example, if a TT "Shelter" is 1000g and the total pack is 2000g, its percentage is 50%. If an MT "Tent" under "Shelter" is 800g, its percentage is 80% (800g / 1000g).
+    - Round all percentages to one decimal place.
+4.  **Sort Lists:** At each level (TT, MT, and BT), the list of tags MUST be sorted in descending order by weight.
+5.  **Format the Output:** You must return ONLY a JSON object that matches the provided schema. The structure must be nested. An empty \`children\` array is acceptable if a tag has no sub-tags.
 
-**Example Item List:**
-- Hubba Hubba NX (1720g) [Shelter / Tent / 2-Person Tent]
-- Leatherman Signal (212g) [Tools / Knife / Multi-tool]
-
-**Example JSON Output:**
+**Example JSON Output Structure:**
 {
-  "totalWeight": 1932,
+  "totalWeight": 2000,
   "distribution": [
-    { "tag": "Shelter", "weight": 1720, "percentage": 89.0 },
-    { "tag": "Tools", "weight": 212, "percentage": 11.0 }
+    {
+      "tag": "Shelter", "weight": 1500, "percentage": 75.0,
+      "children": [
+        {
+          "tag": "Tent", "weight": 1200, "percentage": 80.0,
+          "children": [
+            { "tag": "2-Person Tent", "weight": 1200, "percentage": 100.0 }
+          ]
+        },
+        { "tag": "Tarp", "weight": 300, "percentage": 20.0 }
+      ]
+    },
+    { "tag": "Cookware", "weight": 500, "percentage": 25.0, "children": [] }
   ]
 }
 `;
@@ -258,13 +272,37 @@ ${gearListString}
                     properties: {
                         totalWeight: { type: Type.INTEGER },
                         distribution: {
-                            type: Type.ARRAY,
+                            type: Type.ARRAY, // TT Level
                             items: {
                                 type: Type.OBJECT,
                                 properties: {
                                     tag: { type: Type.STRING },
                                     weight: { type: Type.INTEGER },
                                     percentage: { type: Type.NUMBER },
+                                    children: {
+                                        type: Type.ARRAY, // MT Level
+                                        items: {
+                                            type: Type.OBJECT,
+                                            properties: {
+                                                tag: { type: Type.STRING },
+                                                weight: { type: Type.INTEGER },
+                                                percentage: { type: Type.NUMBER },
+                                                children: {
+                                                    type: Type.ARRAY, // BT Level
+                                                    items: {
+                                                        type: Type.OBJECT,
+                                                        properties: {
+                                                            tag: { type: Type.STRING },
+                                                            weight: { type: Type.INTEGER },
+                                                            percentage: { type: Type.NUMBER },
+                                                        },
+                                                        required: ["tag", "weight", "percentage"]
+                                                    }
+                                                }
+                                            },
+                                            required: ["tag", "weight", "percentage"]
+                                        }
+                                    }
                                 },
                                 required: ["tag", "weight", "percentage"]
                             }

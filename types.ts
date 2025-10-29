@@ -38,11 +38,14 @@ export interface BrandInfo {
     logoFilename?: string;
 }
 
+export interface DistributionNode {
+  tag: string;
+  weight: number;
+  percentage: number;
+  children?: DistributionNode[];
+}
+
 export interface PackAnalysis {
   totalWeight: number;
-  distribution: {
-    tag: string;
-    weight: number;
-    percentage: number;
-  }[];
+  distribution: DistributionNode[];
 }
