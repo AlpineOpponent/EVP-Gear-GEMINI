@@ -37,3 +37,12 @@ export interface BrandInfo {
     domain: string;
     logoFilename?: string;
 }
+
+export interface PackAnalysis {
+  totalWeight: number;
+  distribution: {
+    tag: string;
+    weight: number;
+    percentage: number;
+  }[];
+}

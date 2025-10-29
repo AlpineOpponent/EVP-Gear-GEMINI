@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { GearItem, TagHierarchy } from '../types';
+import Chart from 'react-apexcharts';
+import { GearItem, TagHierarchy, PackAnalysis } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { analyzePack } from '../services/geminiService';
-import Modal from './modals/Modal';
 
 const PackItemDisplay: React.FC<{item: GearItem, isSelected: boolean, onToggle: (id: string) => void}> = ({ item, isSelected, onToggle }) => {
     return (
@@ -27,7 +27,7 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
   const [searchQuery, setSearchQuery] = useState('');
   const [searchBy, setSearchBy] = useState<'item' | 'brand' | 'tag'>('item');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<PackAnalysis | null>(null);
 
   const toggleItem = (itemId: string) => {
     setSelectedItems(prev => {
@@ -93,6 +93,47 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
     }
   };
 
+  const analysisChartOptions = useMemo(() => {
+    if (!analysisResult) return {};
+    return {
+        chart: { type: 'pie', background: 'transparent' },
+        labels: analysisResult.distribution.map(d => d.tag),
+        colors: analysisResult.distribution.map(d => tagHierarchy[d.tag]?.color || '#94a3b8'),
+        legend: {
+            position: 'bottom',
+            labels: { colors: '#cbd5e1' }
+        },
+        tooltip: {
+            y: {
+                formatter: (value: number, { seriesIndex }: any) => {
+                    const weight = analysisResult.distribution[seriesIndex]?.weight || 0;
+                    return `${value.toFixed(1)}% (${weight}g)`;
+                },
+            },
+            theme: 'dark'
+        },
+        dataLabels: {
+            style: {
+                colors: ['#fff']
+            },
+            dropShadow: {
+                enabled: true,
+                top: 1,
+                left: 1,
+                blur: 1,
+                color: '#000',
+                opacity: 0.45
+            }
+        },
+    };
+  }, [analysisResult, tagHierarchy]);
+
+  const analysisChartSeries = useMemo(() => {
+    if (!analysisResult) return [];
+    return analysisResult.distribution.map(d => d.percentage);
+  }, [analysisResult]);
+
+
   const renderHierarchicalList = () => (
     <div className="space-y-4">
         {Object.keys(tagHierarchy).map(tt => (
@@ -127,7 +168,7 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
       ))}
     </div>
   );
-
+  
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
@@ -159,13 +200,13 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
                 <p className="text-slate-400 text-sm font-bold uppercase tracking-wider">Total Pack Weight</p>
                 <p className="text-4xl font-bold text-sky-400 mt-2">{totalWeight}g</p>
                 <p className="text-slate-400">({(totalWeight / 1000).toFixed(2)} kg)</p>
-                <button onClick={handlePrint} disabled={packedGear.length === 0} className="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <button onClick={handlePrint} disabled={packedGear.length === 0} className="mt-4 w-full bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     Print Pack List
                 </button>
                  <button 
                     onClick={handleAnalyzePack} 
                     disabled={isAnalyzing || packedGear.length === 0} 
-                    className="mt-4 w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500">
+                    className="mt-2 w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500">
                         {isAnalyzing ? (
                             <>
                                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -179,6 +220,35 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
                         )}
                 </button>
             </div>
+
+            {(isAnalyzing || analysisResult) && (
+              <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
+                <h3 className="text-lg font-bold mb-4 text-white text-center">Weight Distribution</h3>
+                {isAnalyzing && (
+                  <div className="flex justify-center items-center h-56">
+                    <div className="flex flex-col items-center">
+                        <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="mt-3 text-slate-300">Analyzing...</p>
+                    </div>
+                  </div>
+                )}
+                {!isAnalyzing && analysisResult && (
+                  <div>
+                    <p className="text-center text-xl font-bold text-white -mt-2 mb-2">Total Weight: {analysisResult.totalWeight}g</p>
+                    <Chart options={analysisChartOptions} series={analysisChartSeries} type="pie" width="100%" />
+                  </div>
+                )}
+                 {!isAnalyzing && !analysisResult && (
+                    <div className="text-center text-amber-400 h-56 flex items-center justify-center">
+                        <p>Analysis could not be completed. Please try again.</p>
+                    </div>
+                 )}
+              </div>
+            )}
+
              <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
                 <h3 className="text-lg font-bold mb-2 text-white">Packed Items ({packedGear.length})</h3>
                 <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
@@ -193,25 +263,6 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
         </div>
       </div>
 
-       {analysisResult && (
-            <Modal
-                isOpen={true}
-                onClose={() => setAnalysisResult(null)}
-                title="Pack Analysis ✨"
-            >
-                <div className="text-slate-300 whitespace-pre-wrap font-mono bg-slate-900 p-4 rounded-md">
-                    {analysisResult}
-                </div>
-                <div className="flex justify-end mt-4">
-                    <button
-                        onClick={() => setAnalysisResult(null)}
-                        className="px-4 py-2 rounded-md bg-slate-600 hover:bg-slate-500"
-                    >
-                        Close
-                    </button>
-                </div>
-            </Modal>
-        )}
     </div>
   );
 };
