@@ -1,0 +1,5 @@
+{
+  "name": "EVP-Gear: AI Backpacking Assistant",
+  "description": "EVP-Gear is a web app for backpackers to organize, analyze, and pack their outdoor gear. It allows users to input, tag, view, and pack their items efficiently — combining manual form entry with AI-assisted tagging, visualization, and up-to-date information from Google Search.",
+  "requestFramePermissions": []
+}
