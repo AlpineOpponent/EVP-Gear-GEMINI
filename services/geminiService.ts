@@ -320,3 +320,35 @@ ${gearListString}
         return null;
     }
 };
+
+export const getPackSummary = async (analysis: PackAnalysis): Promise<string | null> => {
+    if (!API_KEY) return null;
+
+    const analysisString = `Total Weight: ${analysis.totalWeight}g\nDistribution:\n${
+        analysis.distribution.map(d => `- ${d.tag}: ${d.percentage.toFixed(1)}%`).join('\n')
+    }`;
+
+    const prompt = `
+You are an expert ultralight backpacker providing advice. Based on the following pack analysis, provide a concise, two-sentence summary.
+
+**Analysis Data:**
+${analysisString}
+
+**Instructions:**
+1.  **First Sentence:** Comment on what kind of trip this total weight is suitable for (e.g., weekend, multi-day, ultralight, traditional) and mention the overall weight distribution (e.g., "well-balanced", "heavily skewed towards shelter").
+2.  **Second Sentence:** Give a single, high-level suggestion on where to cut weight, focusing on the largest category or categories.
+3.  **Strictly adhere to the two-sentence format.**
+
+Your summary:
+`;
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error generating pack summary:", error);
+        return "Could not generate summary.";
+    }
+};
