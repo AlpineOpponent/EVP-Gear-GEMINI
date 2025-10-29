@@ -3,6 +3,7 @@ import { GearItem, TagHierarchy, ModalState, TagNode, TagPath } from '../types';
 import ActionsMenu from './ActionsMenu';
 import { BrandLogo } from './BrandLogo';
 
+
 const GearItemCard: React.FC<{ 
     item: GearItem, 
     openModal: (type: ModalState['type'], data: any) => void;
@@ -154,8 +155,8 @@ const ViewView: React.FC<{
   return (
     <div className="space-y-6">
         <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
-            <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-grow">
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+                 <div className="relative flex-grow w-full">
                     <input
                         type="text"
                         placeholder={`Search by ${searchBy}...`}
@@ -174,15 +175,9 @@ const ViewView: React.FC<{
                 </div>
             </div>
         </div>
-      
-       {searchResults ? renderSearchView() : renderHierarchicalView()}
+        
+        {searchQuery ? renderSearchView() : renderHierarchicalView()}
 
-       {Object.keys(nestedGear).length === 0 && !searchResults && (
-         <div className="text-center py-16 bg-slate-800 rounded-lg">
-            <h2 className="text-2xl font-bold text-white">Your Gear Locker is Empty</h2>
-            <p className="text-slate-400 mt-2">Go to the "Edit" tab to add your first item!</p>
-        </div>
-       )}
     </div>
   );
 };

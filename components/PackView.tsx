@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GearItem, TagHierarchy } from '../types';
 import { BrandLogo } from './BrandLogo';
-
-// Recharts is loaded from a script tag in index.html, so we access it on the window object.
+import { analyzePack } from '../services/geminiService';
+import Modal from './modals/Modal';
 
 const PackItemDisplay: React.FC<{item: GearItem, isSelected: boolean, onToggle: (id: string) => void}> = ({ item, isSelected, onToggle }) => {
     return (
@@ -26,26 +26,8 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchBy, setSearchBy] = useState<'item' | 'brand' | 'tag'>('item');
-  
-  // State to track if the Recharts library is loaded and ready
-  const [rechartsReady, setRechartsReady] = useState(!!(window as any).Recharts);
-
-  useEffect(() => {
-    // If Recharts is already available, we don't need to do anything.
-    if (rechartsReady) return;
-
-    // This handles the race condition where the component might render
-    // before the external Recharts script has finished loading.
-    const interval = setInterval(() => {
-      if ((window as any).Recharts) {
-        setRechartsReady(true);
-        clearInterval(interval);
-      }
-    }, 100); // Check every 100ms
-
-    // Cleanup the interval if the component unmounts.
-    return () => clearInterval(interval);
-  }, [rechartsReady]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
 
   const toggleItem = (itemId: string) => {
     setSelectedItems(prev => {
@@ -72,17 +54,13 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
     const weight = packed.reduce((sum, item) => sum + item.weight, 0);
     return { totalWeight: weight, packedGear: packed.sort((a,b) => b.weight - a.weight) };
   }, [selectedItems, gearItems]);
-  
-  const chartData = useMemo(() => {
-    if (packedGear.length === 0 || totalWeight === 0) return [];
-    
-    return packedGear.map(item => ({
-        name: `${item.name} (${((item.weight / totalWeight) * 100).toFixed(1)}%)`,
-        value: item.weight,
-        color: tagHierarchy[item.tt]?.color || '#7f8c8d' // Use the item's top tag color
-    }));
-  }, [packedGear, tagHierarchy, totalWeight]);
 
+  const handleAnalyzePack = async () => {
+    setIsAnalyzing(true);
+    const result = await analyzePack(packedGear);
+    setAnalysisResult(result);
+    setIsAnalyzing(false);
+  };
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -149,58 +127,6 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
       ))}
     </div>
   );
-  
-  const renderChart = () => {
-    // Wait until the Recharts library is confirmed to be loaded.
-    if (!rechartsReady) {
-        return (
-            <div className="bg-slate-800 p-4 rounded-lg shadow-xl flex justify-center items-center" style={{ minHeight: '322px' }}>
-                <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
-                    <p className="ml-3 text-slate-400">Loading Chart...</p>
-                </div>
-            </div>
-        );
-    }
-    
-    // Once ready, destructure the components from the global Recharts object.
-    const { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } = (window as any).Recharts;
-    
-    return (
-        <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
-            <h3 className="text-lg font-bold mb-4 text-white text-center">Weight Distribution</h3>
-            <div style={{ width: '100%', height: 250 }}>
-                <ResponsiveContainer>
-                    <PieChart>
-                        <Pie
-                            data={chartData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            outerRadius={80}
-                            fill="#8884d8"
-                            dataKey="value"
-                            nameKey="name"
-                            stroke="#334155"
-                        >
-                            {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                        </Pie>
-                        <Tooltip
-                            formatter={(value: number, name: string) => [`${value}g`, name.split(' (')[0]]}
-                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }}
-                            labelStyle={{ color: '#cbd5e1' }}
-                            itemStyle={{ color: '#94a3b8' }}
-                        />
-                        <Legend wrapperStyle={{fontSize: "0.8rem", paddingTop: "10px"}}/>
-                    </PieChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-    );
-  };
-
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -236,11 +162,26 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
                 <button onClick={handlePrint} disabled={packedGear.length === 0} className="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     Print Pack List
                 </button>
+                 <button 
+                    onClick={handleAnalyzePack} 
+                    disabled={isAnalyzing || packedGear.length === 0} 
+                    className="mt-4 w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500">
+                        {isAnalyzing ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Analyzing...
+                            </>
+                        ) : (
+                            '✨ Analyse Pack'
+                        )}
+                </button>
             </div>
-            {chartData.length > 0 && renderChart()}
              <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
                 <h3 className="text-lg font-bold mb-2 text-white">Packed Items ({packedGear.length})</h3>
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
+                <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
                     {packedGear.length > 0 ? packedGear.map(item => (
                         <div key={item.id} className="flex justify-between items-center text-sm bg-slate-700/50 p-2 rounded">
                             <span className="text-slate-300 truncate pr-2">{item.name}</span>
@@ -251,6 +192,26 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
             </div>
         </div>
       </div>
+
+       {analysisResult && (
+            <Modal
+                isOpen={true}
+                onClose={() => setAnalysisResult(null)}
+                title="Pack Analysis ✨"
+            >
+                <div className="text-slate-300 whitespace-pre-wrap font-mono bg-slate-900 p-4 rounded-md">
+                    {analysisResult}
+                </div>
+                <div className="flex justify-end mt-4">
+                    <button
+                        onClick={() => setAnalysisResult(null)}
+                        className="px-4 py-2 rounded-md bg-slate-600 hover:bg-slate-500"
+                    >
+                        Close
+                    </button>
+                </div>
+            </Modal>
+        )}
     </div>
   );
 };

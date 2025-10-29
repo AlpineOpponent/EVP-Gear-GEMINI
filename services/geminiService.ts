@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { TagHierarchy } from '../types';
+import { TagHierarchy, GearItem } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -201,5 +201,55 @@ export const findBrandDomain = async (brandName: string): Promise<string | null>
     } catch (error) {
         console.error("Error finding brand domain:", error);
         return null;
+    }
+};
+
+export const analyzePack = async (gearItems: GearItem[]): Promise<string | null> => {
+    if (!API_KEY) return "AI features are disabled because the API key is not set.";
+    if (gearItems.length === 0) {
+        return "There is no gear to analyze. Go to the 'Edit' tab to add your first item!";
+    }
+
+    const gearListString = gearItems.map(item =>
+        `- ${item.name} (${item.weight}g) [${item.tt} / ${item.mt} / ${item.bt}]`
+    ).join('\n');
+
+    const prompt = `
+You are an expert backpacking gear analyst. Your task is to analyze a provided list of gear items and calculate the weight distribution by top-level category. Your response should be formatted as clean, readable text.
+
+Here is the list of gear items. Each item includes its name, weight in grams, and its category path:
+
+${gearListString}
+
+**Instructions:**
+
+1.  **Calculate Total Weight:** Sum the weights of ALL items to get the total pack weight in grams.
+2.  **Group by Top Tag:** Group all items by their "Top Tag".
+3.  **Calculate Category Weights:** For each Top Tag, sum the weights of all items within that category.
+4.  **Calculate Percentages:** For each Top Tag, calculate what percentage of the total pack weight it represents. Format the percentage to one decimal place (e.g., 35.2%).
+5.  **Format the Output:** Present the analysis clearly.
+    *   Start with the total pack weight on its own line in a bold format.
+    *   Then, list each Top Tag, its total weight in grams, and its percentage of the total pack weight. Use bullet points.
+6.  **Sort the List:** The list of Top Tags must be sorted in descending order, from the highest percentage to the lowest.
+
+**Example Output Format:**
+
+**Total Pack Weight: 3365g**
+
+*   **Shelter:** 2882g (85.6%)
+*   **Tools:** 212g (6.3%)
+*   **Tech:** 180g (5.3%)
+*   **Cookware:** 73g (2.2%)
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error analyzing pack:", error);
+        return "Sorry, I was unable to analyze the pack at this time.";
     }
 };

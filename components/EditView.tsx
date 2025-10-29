@@ -298,7 +298,7 @@ const EditView: React.FC<EditViewProps> = ({ onAddItem, tagHierarchy }) => {
                 </div>
             </div>
              <div className="mt-4">
-                 <InputField label="Weight (grams)" name="weight" type="number" value={item.weight} onChange={handleItemChange} required placeholder="e.g., 1720"/>
+                 <InputField label="Weight (grams)" name="weight" type="number" value={item.weight === 0 ? '' : item.weight} onChange={handleItemChange} required placeholder="e.g., 1720"/>
             </div>
             <div className="mt-4">
                 <TextAreaField label="Notes" name="notes" value={item.notes} onChange={handleItemChange} placeholder="e.g., Reliable 2-person tent."/>
