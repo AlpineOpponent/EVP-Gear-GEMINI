@@ -47,9 +47,6 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
     return () => clearInterval(interval);
   }, [rechartsReady]);
 
-  // We can now safely access Recharts components once rechartsReady is true.
-  const { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } = (window as any).Recharts || {};
-
   const toggleItem = (itemId: string) => {
     setSelectedItems(prev => {
         const newSet = new Set(prev);
@@ -79,15 +76,10 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
   const chartData = useMemo(() => {
     if (packedGear.length === 0 || totalWeight === 0) return [];
     
-    const weightByTT = packedGear.reduce((acc, item) => {
-        acc[item.tt] = (acc[item.tt] || 0) + item.weight;
-        return acc;
-    }, {} as { [key: string]: number });
-    
-    return Object.entries(weightByTT).map(([name, value]) => ({
-        name: `${name} (${((value / totalWeight) * 100).toFixed(1)}%)`,
-        value,
-        color: tagHierarchy[name]?.color || '#7f8c8d' // fallback color
+    return packedGear.map(item => ({
+        name: `${item.name} (${((item.weight / totalWeight) * 100).toFixed(1)}%)`,
+        value: item.weight,
+        color: tagHierarchy[item.tt]?.color || '#7f8c8d' // Use the item's top tag color
     }));
   }, [packedGear, tagHierarchy, totalWeight]);
 
@@ -157,6 +149,58 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
       ))}
     </div>
   );
+  
+  const renderChart = () => {
+    // Wait until the Recharts library is confirmed to be loaded.
+    if (!rechartsReady) {
+        return (
+            <div className="bg-slate-800 p-4 rounded-lg shadow-xl flex justify-center items-center" style={{ minHeight: '322px' }}>
+                <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
+                    <p className="ml-3 text-slate-400">Loading Chart...</p>
+                </div>
+            </div>
+        );
+    }
+    
+    // Once ready, destructure the components from the global Recharts object.
+    const { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } = (window as any).Recharts;
+    
+    return (
+        <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
+            <h3 className="text-lg font-bold mb-4 text-white text-center">Weight Distribution</h3>
+            <div style={{ width: '100%', height: 250 }}>
+                <ResponsiveContainer>
+                    <PieChart>
+                        <Pie
+                            data={chartData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                            nameKey="name"
+                            stroke="#334155"
+                        >
+                            {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                        </Pie>
+                        <Tooltip
+                            formatter={(value: number, name: string) => [`${value}g`, name.split(' (')[0]]}
+                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }}
+                            labelStyle={{ color: '#cbd5e1' }}
+                            itemStyle={{ color: '#94a3b8' }}
+                        />
+                        <Legend wrapperStyle={{fontSize: "0.8rem", paddingTop: "10px"}}/>
+                    </PieChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    );
+  };
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -168,7 +212,7 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
             <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-grow">
                     <input type="text" placeholder={`Search by ${searchBy}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-md pl-10 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 </div>
                 <div className="flex-shrink-0 bg-slate-700 rounded-md p-1 flex space-x-1">
                     {(['item', 'brand', 'tag'] as const).map(type => (
@@ -193,48 +237,7 @@ const PackView: React.FC<{ nestedGear: any, tagHierarchy: TagHierarchy, gearItem
                     Print Pack List
                 </button>
             </div>
-            {chartData.length > 0 && (
-                rechartsReady ? (
-                <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
-                    <h3 className="text-lg font-bold mb-4 text-white text-center">Weight Distribution</h3>
-                    <div style={{ width: '100%', height: 250 }}>
-                        <ResponsiveContainer>
-                            <PieChart>
-                                <Pie
-                                    data={chartData}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    outerRadius={80}
-                                    fill="#8884d8"
-                                    dataKey="value"
-                                    nameKey="name"
-                                    stroke="#334155"
-                                >
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    formatter={(value: number, name: string) => [`${value}g`, name.split(' (')[0]]}
-                                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }}
-                                    labelStyle={{ color: '#cbd5e1' }}
-                                    itemStyle={{ color: '#94a3b8' }}
-                                />
-                                <Legend wrapperStyle={{fontSize: "0.8rem", paddingTop: "10px"}}/>
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-                ) : (
-                    <div className="bg-slate-800 p-4 rounded-lg shadow-xl flex justify-center items-center" style={{ minHeight: '322px' }}>
-                        <div className="flex items-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
-                            <p className="ml-3 text-slate-400">Loading Chart...</p>
-                        </div>
-                    </div>
-                )
-            )}
+            {chartData.length > 0 && renderChart()}
              <div className="bg-slate-800 p-4 rounded-lg shadow-xl">
                 <h3 className="text-lg font-bold mb-2 text-white">Packed Items ({packedGear.length})</h3>
                 <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
